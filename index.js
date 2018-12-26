@@ -3,40 +3,62 @@ const url = require('url');
 const path = require('path')
 const fs = require('fs')
 const mime = require('mime')
+const util = require('util')
+const ejs = require('ejs')
+const debug = require('debug')('*')
 
-const staticServer = http.createServer((req, res) => {
-	let urlObj = url.parse(req.url)
-	let urlPathname = urlObj.pathname
-	let filePathname = path.join(__dirname, "/public", urlPathname)
-	let ext = path.parse(urlPathname).ext
-	let mimeType = mime.getType(ext)
-	fs.readFile(filePathname, (err, data) => {
-		if (err) {
-			fs.stat(filePathname, (err, stats) => {
-				if (err) {
-					res.writeHead(404)
-					res.write("404")
-					res.end()
-				} else {
-					if (stats.isDirectory()) {
-						let files = fs.readdirSync(filePathname)
-						console.log(files)
-						res.writeHead(200)
-						res.write(files.toString())
-						res.end()
-					}
-				}
-			})
-		} else {
+const config = require('./config')
+// 方法promise化
+const readFile = util.promisify(fs.readFile)
+const stat = util.promisify(fs.stat)
+const readdir = util.promisify(fs.readdir)
+
+const template = fs.readFileSync(path.join(__dirname, "/catalog.html"), "utf8")
+
+class StaticServer {
+	constructor() {
+		this.config = config
+		this.template = template
+	}
+	
+	async handleRequest(req, res) {
+		const {pathname} = url.parse(req.url)
+		const filePath = path.join(this.config.dir, pathname)
+		let ext = path.parse(filePath).ext
+		let mimeType = mime.getType(ext)
+		try {
+			const files = await readFile(filePath)
 			res.writeHead(200, {"Content-Type": `${mimeType};charset=UTF8`})
-			res.write(data)
-			res.end()
+			res.end(files)
+		} catch (e) {
+			await this.sendFileDir(filePath, res)
 		}
-	})
-})
+	}
+	
+	async sendFileDir(filePath, res) {
+		try {
+			let dirs = await readdir(filePath)
+			let catalog = ejs.render(this.template, {dirs})
+			res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
+			res.end(catalog)
+		} catch (e) {
+			this.sendError(e, res)
+		}
+	}
+	
+	sendError(err, res) {
+		debug(err)
+		res.statusCode = 404
+		res.end()
+	}
+	
+	start() {
+		const {host, port} = this.config
+		let server = http.createServer(this.handleRequest.bind(this))
+		server.listen(port, host)
+		debug(`http://${host}:${port} start`) //命令行中打印
+	}
+}
 
-
-staticServer.listen(3000, () => {
-	console.log("静态资源服务器运行中.")
-	console.log("正在监听3000端口：")
-})
+let server = new StaticServer()
+server.start()

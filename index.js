@@ -24,32 +24,75 @@ class StaticServer {
 	async handleRequest(req, res) {
 		const {pathname} = url.parse(req.url)
 		const filePath = path.join(this.config.dir, pathname)
-		let ext = path.parse(filePath).ext
-		let mimeType = mime.getType(ext)
 		try {
-			const files = await readFile(filePath)
-			res.writeHead(200, {"Content-Type": `${mimeType};charset=UTF8`})
-			res.end(files)
+			const stats = await stat(filePath)
+			if (stats.isDirectory()) {
+				this.sendFileDir(filePath, res)
+			} else {
+				this.sendFile(stats, filePath, req, res)
+			}
 		} catch (e) {
-			await this.sendFileDir(filePath, res)
+			//文件不存在情况
+			this.sendError(req, res, e)
 		}
 	}
 	
+	/**
+	 * 获取目录下所有文件列表
+	 * @param filePath
+	 * @param res
+	 * @return {Promise<void>}
+	 */
 	async sendFileDir(filePath, res) {
-		try {
-			let dirs = await readdir(filePath)
-			let catalog = ejs.render(this.template, {dirs})
-			res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
-			res.end(catalog)
-		} catch (e) {
-			this.sendError(e, res)
+		let dirs = await readdir(filePath)
+		let catalog = ejs.render(this.template, {dirs})
+		res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
+		res.end(catalog)
+	}
+	
+	/**
+	 * 获取具体文件
+	 * @param filePath
+	 * @param res
+	 * @return {Promise<void>}
+	 */
+	async sendFile(stats, filePath, req, res) {
+		if (this.cache(stats, req, res)) {
+			res.statusCode = 304
+			res.end()
+		} else {
+			let ext = path.parse(filePath).ext
+			let mimeType = mime.getType(ext)
+			let file = await readFile(filePath)
+			res.writeHead(200, {"Content-Type": `${mimeType};charset=UTF8`})
+			res.end(file)
 		}
 	}
 	
+	/**
+	 * 错误信息
+	 * @param err
+	 * @param res
+	 */
 	sendError(err, res) {
 		debug(err)
 		res.statusCode = 404
 		res.end()
+	}
+	
+	cache(stats, req, res) {
+		res.setHeader("Cache-Control", "no-cache")
+		res.setHeader('Expires', new Date(Date.now() + 60 * 1000).toGMTString());//60秒后重新发请求
+		const lastModified = stats.ctime.toUTCString()
+		const etag = stats.ctime.toJSON() + stats.size.toString()
+		res.setHeader('Etag', etag);
+		res.setHeader('Last-Modified', lastModified);
+		const ifModifiedSince = req.headers["if-modified-since"]
+		const ifNoneMatch = req.headers["if-none-match"]
+		if (lastModified === ifModifiedSince && etag === ifNoneMatch) {
+			return true
+		}
+		return false
 	}
 	
 	start() {

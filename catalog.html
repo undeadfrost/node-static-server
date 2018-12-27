@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>静态资源</title>
 </head>
 <body>
-<% dirs.map(item=>{%>
-<li><%=item%></li>
-<%})%>
+<ol>
+    <% dirs.map(item=>{%>
+    <li><a href="<%=item%>"><%=item%></a></li>
+    <%})%>
+</ol>
 </body>
 </html>

@@ -9,7 +9,6 @@ const debug = require('debug')('*')
 
 const config = require('./config')
 // 方法promise化
-const readFile = util.promisify(fs.readFile)
 const stat = util.promisify(fs.stat)
 const readdir = util.promisify(fs.readdir)
 
@@ -63,9 +62,10 @@ class StaticServer {
 		} else {
 			let ext = path.parse(filePath).ext
 			let mimeType = mime.getType(ext)
-			let file = await readFile(filePath)
+			let {start, end} = this.range(stats, filePath, req, res)
 			res.writeHead(200, {"Content-Type": `${mimeType};charset=UTF8`})
-			res.end(file)
+			// 管道流输出到response
+			fs.createReadStream(filePath, {start, end}).pipe(res)
 		}
 	}
 	
@@ -80,6 +80,13 @@ class StaticServer {
 		res.end()
 	}
 	
+	/**
+	 * http缓存配置
+	 * @param stats
+	 * @param req
+	 * @param res
+	 * @return {boolean}
+	 */
 	cache(stats, req, res) {
 		res.setHeader("Cache-Control", "no-cache")
 		res.setHeader('Expires', new Date(Date.now() + 60 * 1000).toGMTString());//60秒后重新发请求
@@ -95,6 +102,33 @@ class StaticServer {
 		return false
 	}
 	
+	/**
+	 * 断点续传
+	 * @param stats
+	 * @param filePath
+	 * @param req
+	 * @param res
+	 */
+	range(stats, filePath, req, res) {
+		const range = req.headers["range"]
+		res.setHeader("Accept-Ranges", "bytes")
+		if (range) {
+			let [, start, end] = range.match(/(\d*)-(\d*)/); //解构出开始和结束的位置
+			start = start ? Number(start) : 0
+			end = end ? Number(end) : stats.size
+			res.statusCode = 206
+			res.setHeader("Content-Length", end - start)
+			res.setHeader("Content-Range", `bytes ${start}-${end}/${start.size}`)
+			return {start, end}
+		} else {
+			res.setHeader("Content-Length", stats.size)
+			return {start: 0, end: stats.size}
+		}
+	}
+	
+	/**
+	 * 启动函数
+	 */
 	start() {
 		const {host, port} = this.config
 		let server = http.createServer(this.handleRequest.bind(this))

@@ -5,6 +5,7 @@ const fs = require('fs')
 const mime = require('mime')
 const util = require('util')
 const ejs = require('ejs')
+const zlib = require('zlib');
 const debug = require('debug')('*')
 
 const config = require('./config')
@@ -63,9 +64,13 @@ class StaticServer {
 			let ext = path.parse(filePath).ext
 			let mimeType = mime.getType(ext)
 			let {start, end} = this.range(stats, filePath, req, res)
-			res.writeHead(200, {"Content-Type": `${mimeType};charset=UTF8`})
-			// 管道流输出到response
-			fs.createReadStream(filePath, {start, end}).pipe(res)
+			let compress = this.gzip(stats, filePath, req, res)
+			res.setHeader("Content-Type", `${mimeType};charset=UTF8`)
+			if (compress) {
+				fs.createReadStream(filePath, {stats, end}).pipe(compress).pipe(res)
+			} else {
+				fs.createReadStream(filePath, {start, end}).pipe(res)
+			}
 		}
 	}
 	
@@ -123,6 +128,31 @@ class StaticServer {
 		} else {
 			res.setHeader("Content-Length", stats.size)
 			return {start: 0, end: stats.size}
+		}
+	}
+	
+	/**
+	 * 压缩
+	 * @param stats
+	 * @param filePath
+	 * @param req
+	 * @param res
+	 * @return {*}
+	 */
+	gzip(stats, filePath, req, res) {
+		const encoding = req.headers["accept-encoding"]
+		if (encoding) {
+			if (encoding.match(/\bgzip\b/)) {
+				res.setHeader("Content-Encoding", "gzip")
+				return zlib.createGzip()
+			} else if (encoding.match(/\bdeflate\b/)) {
+				res.setHeader("Content-Encoding", "deflate")
+				return zlib.createDeflate()
+			} else {
+				return false
+			}
+		} else {
+			return false
 		}
 	}
 	

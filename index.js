@@ -65,13 +65,13 @@ class StaticServer {
 			let ext = path.parse(filePath).ext
 			let mimeType = mime.getType(ext)
 			let {start, end} = this.range(stats, filePath, req, res)
-			// let compress = this.gzip(stats, filePath, req, res)
+			let compress = this.gzip(stats, filePath, req, res)
 			res.setHeader("Content-Type", `${mimeType};charset=UTF8`)
-			// if (compress) {
-			// 	fs.createReadStream(filePath, {stats, end}).pipe(compress).pipe(res)
-			// } else {
-			fs.createReadStream(filePath, {start, end}).pipe(res)
-			// }
+			if (compress) {
+				fs.createReadStream(filePath, {start, end}).pipe(compress).pipe(res)
+			} else {
+				fs.createReadStream(filePath, {start, end}).pipe(res)
+			}
 		}
 	}
 	

@@ -9,6 +9,7 @@ const zlib = require('zlib');
 const debug = require('debug')('*')
 
 const config = require('./config')
+
 // 方法promise化
 const stat = util.promisify(fs.stat)
 const readdir = util.promisify(fs.readdir)
@@ -64,13 +65,13 @@ class StaticServer {
 			let ext = path.parse(filePath).ext
 			let mimeType = mime.getType(ext)
 			let {start, end} = this.range(stats, filePath, req, res)
-			let compress = this.gzip(stats, filePath, req, res)
+			// let compress = this.gzip(stats, filePath, req, res)
 			res.setHeader("Content-Type", `${mimeType};charset=UTF8`)
-			if (compress) {
-				fs.createReadStream(filePath, {stats, end}).pipe(compress).pipe(res)
-			} else {
-				fs.createReadStream(filePath, {start, end}).pipe(res)
-			}
+			// if (compress) {
+			// 	fs.createReadStream(filePath, {stats, end}).pipe(compress).pipe(res)
+			// } else {
+			fs.createReadStream(filePath, {start, end}).pipe(res)
+			// }
 		}
 	}
 	
@@ -123,7 +124,7 @@ class StaticServer {
 			end = end ? Number(end) : stats.size
 			res.statusCode = 206
 			res.setHeader("Content-Length", end - start)
-			res.setHeader("Content-Range", `bytes ${start}-${end}/${start.size}`)
+			res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`)
 			return {start, end}
 		} else {
 			res.setHeader("Content-Length", stats.size)

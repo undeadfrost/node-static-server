@@ -1,19 +1,20 @@
 const http = require('http');
 const url = require('url');
-const path = require('path')
-const fs = require('fs')
-const mime = require('mime')
-const util = require('util')
-const ejs = require('ejs')
+const path = require('path');
+const fs = require('fs');
+const mime = require('mime');
+const util = require('util');
+const ejs = require('ejs');
 const zlib = require('zlib');
-const debug = require('debug')('*')
+const debug = require('debug')('*');
 
 const config = require('./config')
 
 // 方法promise化
-const stat = util.promisify(fs.stat)
-const readdir = util.promisify(fs.readdir)
+const stat = util.promisify(fs.stat) // 获取文件信息
+const readdir = util.promisify(fs.readdir) // 读取目录内容
 
+// 读取模板文件(同步)
 const template = fs.readFileSync(path.join(__dirname, "/catalog.html"), "utf8")
 
 class StaticServer {
@@ -22,18 +23,24 @@ class StaticServer {
 		this.template = template
 	}
 	
+	/**
+	 * 请求内容处理
+	 * @param req
+	 * @param res
+	 * @return {Promise<void>}
+	 */
 	async handleRequest(req, res) {
-		const {pathname} = url.parse(req.url)
-		const filePath = path.join(this.config.dir, pathname)
+		const {pathname} = url.parse(req.url) // 解析Url地址获取url路径
+		const filePath = path.join(this.config.dir, pathname) // 拼接url路径到本地物理路径
 		try {
-			const stats = await stat(filePath)
-			if (stats.isDirectory()) {
-				this.sendFileDir(filePath, res)
+			const stats = await stat(filePath) // 读取文件信息
+			if (stats.isDirectory()) { // 判断是否为目录文件
+				this.sendFileDir(filePath, res) // 获取文件目录
 			} else {
-				this.sendFile(stats, filePath, req, res)
+				this.sendFile(stats, filePath, req, res) // 获取文件
 			}
 		} catch (e) {
-			//文件不存在情况
+			// 文件不存在情况
 			this.sendError(req, res, e)
 		}
 	}
@@ -45,28 +52,29 @@ class StaticServer {
 	 * @return {Promise<void>}
 	 */
 	async sendFileDir(filePath, res) {
-		let dirs = await readdir(filePath)
-		let catalog = ejs.render(this.template, {dirs})
+		let dirs = await readdir(filePath) // 读取目录下子文件或文件夹
+		let catalog = ejs.render(this.template, {dirs}) // 输出渲染目录模板
 		res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
 		res.end(catalog)
 	}
 	
 	/**
-	 * 获取具体文件
+	 * 获取文件
 	 * @param filePath
 	 * @param res
 	 * @return {Promise<void>}
 	 */
 	async sendFile(stats, filePath, req, res) {
+		// 检测缓存
 		if (this.cache(stats, req, res)) {
 			res.statusCode = 304
 			res.end()
 		} else {
-			let ext = path.parse(filePath).ext
-			let mimeType = mime.getType(ext)
-			let {start, end} = this.range(stats, filePath, req, res)
-			let compress = this.gzip(stats, filePath, req, res)
-			res.setHeader("Content-Type", `${mimeType};charset=UTF8`)
+			let ext = path.parse(filePath).ext // 获取文件后缀
+			let mimeType = mime.getType(ext) // 获取文件类型
+			let {start, end} = this.range(stats, filePath, req, res) // 查看是否支持范围
+			let compress = this.gzip(stats, filePath, req, res) // 获取gzip压缩
+			res.setHeader("Content-Type", `${mimeType};charset=UTF8`) // 设置response header文件类型及编码
 			if (compress) {
 				fs.createReadStream(filePath, {start, end}).pipe(compress).pipe(res)
 			} else {
@@ -83,7 +91,7 @@ class StaticServer {
 	sendError(err, res) {
 		debug(err)
 		res.statusCode = 404
-		res.end()
+		res.end('Not Found')
 	}
 	
 	/**
@@ -162,7 +170,8 @@ class StaticServer {
 	 */
 	start() {
 		const {host, port} = this.config
-		let server = http.createServer(this.handleRequest.bind(this))
+		let server = http.createServer()
+		server.on('request', this.handleRequest.bind(this))
 		server.listen(port, host)
 		debug(`http://${host}:${port} start`) //命令行中打印
 	}

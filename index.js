@@ -100,14 +100,21 @@ class StaticServer {
 	 * @param req
 	 * @param res
 	 * @return {boolean}
+	 * 强制缓存 服务端 Cache-Control Expires
+	 * 协商缓存  服务端 Last-Modified Etag
+	 * 协商缓存  客户端 if-modified-since  if-none-match
 	 */
 	cache(stats, req, res) {
+		// Cache-Control no-cache用缓存一定要先经过验证，必须从重新去获取请求
 		res.setHeader("Cache-Control", "no-cache")
-		res.setHeader('Expires', new Date(Date.now() + 60 * 1000).toGMTString());//60秒后重新发请求
-		const lastModified = stats.ctime.toUTCString()
-		const etag = stats.ctime.toJSON() + stats.size.toString()
-		res.setHeader('Etag', etag);
-		res.setHeader('Last-Modified', lastModified);
+		// 响应头包含日期/时间， 即在此时候之后，响应过期。
+		// 无效的日期，比如 0, 代表着过去的日期，即该资源已经过期。
+		res.setHeader('Expires', new Date(Date.now() + 60 * 1000).toGMTString());// 60秒后重新发请求
+		const lastModified = stats.ctime.toUTCString() // 文件最后修改时间
+		const etag = stats.ctime.toJSON() + stats.size.toString() // 设定资源标识符Etag
+		res.setHeader('Etag', etag); // 资源的特定版本的标识符
+		res.setHeader('Last-Modified', lastModified); // 设置文件最后修改日期
+		// 比对文件修改日期及资源标识符
 		const ifModifiedSince = req.headers["if-modified-since"]
 		const ifNoneMatch = req.headers["if-none-match"]
 		if (lastModified === ifModifiedSince && etag === ifNoneMatch) {
@@ -127,7 +134,7 @@ class StaticServer {
 		const range = req.headers["range"]
 		res.setHeader("Accept-Ranges", "bytes")
 		if (range) {
-			let [, start, end] = range.match(/(\d*)-(\d*)/); //解构出开始和结束的位置
+			let [, start, end] = range.match(/(\d*)-(\d*)/); // 解构出开始和结束的位置
 			start = start ? Number(start) : 0
 			end = end ? Number(end) : stats.size
 			res.statusCode = 206

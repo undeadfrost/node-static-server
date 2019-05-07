@@ -131,18 +131,18 @@ class StaticServer {
 	 * @param res
 	 */
 	range(stats, filePath, req, res) {
-		const range = req.headers["range"]
-		res.setHeader("Accept-Ranges", "bytes")
+		const range = req.headers["range"] // 请求资源的部分内容（不包括响应头的大小），单位是byte，即字节，从0开始
+		res.setHeader("Accept-Ranges", "bytes") // 通告其支持部分请求的标志物
 		if (range) {
 			let [, start, end] = range.match(/(\d*)-(\d*)/); // 解构出开始和结束的位置
 			start = start ? Number(start) : 0
 			end = end ? Number(end) : stats.size
 			res.statusCode = 206
-			res.setHeader("Content-Length", end - start)
-			res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`)
+			res.setHeader("Content-Length", end - start) // 消息内容长度
+			res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`) // 返回部分长度 / 总大小
 			return {start, end}
 		} else {
-			res.setHeader("Content-Length", stats.size)
+			res.setHeader("Content-Length", stats.size) // 文件总长度
 			return {start: 0, end: stats.size}
 		}
 	}
